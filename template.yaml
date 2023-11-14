@@ -1,0 +1,179 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+    sam-gen-ai
+
+    Powertools example
+
+Globals: # https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-specification-template-anatomy-globals.html
+    Function:
+        Timeout: 30
+        MemorySize: 2048
+        Runtime: python3.10
+        Environment:
+            Variables:
+                POWERTOOLS_SERVICE_NAME: IntroGenAI
+                POWERTOOLS_METRICS_NAMESPACE: Powertools
+                LOG_LEVEL: INFO
+
+
+Resources:
+
+    GenerativeAIFunction:
+        Type: AWS::Serverless::Function # More info about Function Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html
+        DependsOn:
+          - LambdaLoggingPolicy
+        Properties:
+            Handler: app.lambda_handler
+            CodeUri: src
+            Description: Generative ai source function
+            Architectures:
+                - x86_64
+            Tracing: Active
+            Policies:
+                - Statement:
+                    - Sid: "BedrockScopedAccess"
+                      Effect: "Allow"
+                      Action: "bedrock:InvokeModel"
+                      Resource:
+                        - "arn:aws:bedrock:*::foundation-model/ai21.j2-ultra-v1"             # Powertools env vars: https://awslabs.github.io/aws-lambda-powertools-python/#environment-variables
+                        - "arn:aws:bedrock:*::foundation-model/stability.stable-diffusion-xl-v0"             # Powertools env vars: https://awslabs.github.io/aws-lambda-powertools-python/#environment-variables
+
+            Tags:
+                LambdaPowertools: python
+
+    AppSyncServiceRole:
+        Type: "AWS::IAM::Role"
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: "Allow"
+                      Principal:
+                          Service:
+                              - "appsync.amazonaws.com"
+                      Action:
+                          - "sts:AssumeRole"
+    InvokeLambdaResolverPolicy:
+        Type: "AWS::IAM::Policy"
+        Properties:
+            PolicyName: "DirectAppSyncLambda"
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: "Allow"
+                      Action: "lambda:invokeFunction"
+                      Resource:
+                          - !GetAtt GenerativeAIFunction.Arn
+
+            Roles:
+                - !Ref AppSyncServiceRole
+                - !Ref AddLambdaRole
+
+    LambdaLoggingPolicy:
+        Type: "AWS::IAM::Policy"
+        Properties:
+            PolicyName: LambdaXRayPolicy
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: "Allow"
+                      Action: [
+                          "xray:PutTraceSegments",
+                          "xray:PutTelemetryRecords",
+                          "logs:CreateLogGroup",
+                          "logs:CreateLogStream",
+                          "logs:PutLogEvents"
+                      ]
+                      Resource: "*"
+            Roles:
+                - !Ref AddLambdaRole
+
+
+    AddLambdaRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Action:
+                          - "sts:AssumeRole"
+                      Effect: "Allow"
+                      Principal:
+                          Service:
+                              - "lambda.amazonaws.com"
+
+    RoleAppSyncCloudWatch:
+        Type: AWS::IAM::Role
+        Properties:
+            ManagedPolicyArns:
+                - "arn:aws:iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs"
+            AssumeRolePolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    - Effect: Allow
+                      Action:
+                          - sts:AssumeRole
+                      Principal:
+                          Service:
+                              - appsync.amazonaws.com
+    ###################
+    # GRAPHQL API
+    ##################
+
+    GenerativeAIAPI:
+        Type: "AWS::AppSync::GraphQLApi"
+        Properties:
+            Name: GenerativeAIAPI
+            AuthenticationType: "API_KEY"
+            XrayEnabled: true
+            LogConfig:
+                CloudWatchLogsRoleArn: !GetAtt RoleAppSyncCloudWatch.Arn
+                ExcludeVerboseContent: FALSE
+                FieldLogLevel: ALL
+
+    GenerativeAIApiKey:
+        Type: AWS::AppSync::ApiKey
+        Properties:
+            ApiId: !GetAtt GenerativeAIAPI.ApiId
+
+    GenerativeAIApiSchema:
+        Type: "AWS::AppSync::GraphQLSchema"
+        Properties:
+            ApiId: !GetAtt GenerativeAIAPI.ApiId
+            DefinitionS3Location: 'schema/schema.graphql'
+
+    ###################
+    # Lambda Direct Data Source and Resolver
+    ##################
+    GenerativeAIFunctionDataSource:
+        Type: "AWS::AppSync::DataSource"
+        Properties:
+            ApiId: !GetAtt GenerativeAIAPI.ApiId
+            Name: "GenerativeAILambdaDirectResolver"
+            Type: "AWS_LAMBDA"
+            ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+            LambdaConfig:
+                LambdaFunctionArn: !GetAtt GenerativeAIFunction.Arn
+    GenerateSuggestionsResolver:
+        Type: "AWS::AppSync::Resolver"
+        Properties:
+            ApiId: !GetAtt GenerativeAIAPI.ApiId
+            TypeName: "Query"
+            FieldName: "generateSuggestions"
+            DataSourceName: !GetAtt GenerativeAIFunctionDataSource.Name
+    GenerateImageResolver:
+        Type: "AWS::AppSync::Resolver"
+        Properties:
+            ApiId: !GetAtt GenerativeAIAPI.ApiId
+            TypeName: "Query"
+            FieldName: "generateImage"
+            DataSourceName: !GetAtt GenerativeAIFunctionDataSource.Name
+Outputs:
+  GenerativeAIFunction:
+    Description: "Generative ai Lambda Function ARN"
+    Value: !GetAtt GenerativeAIFunction.Arn
+
+  GenerativeAIAPI:
+    Description: "Generative AI API "
+    Value: !Ref GenerativeAIAPI
