@@ -1,15 +1,10 @@
 schema {
             query:Query
-            mutation: Mutation
         }
 
 type Query{
-    generateSuggestions(input:String!):String! @aws_api_key
+    generateText(input:String!):String! @aws_api_key
     generateImage(prompt:String!):String! @aws_api_key
-}
-
-type Mutation{
-    getSuggestions(input:String!):Boolean!
 }
 
 

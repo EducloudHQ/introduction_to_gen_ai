@@ -16,7 +16,7 @@ logger = Logger(child=True)
 router = Router()
 
 
-@router.resolver(type_name="Query", field_name="generateSuggestions")
+@router.resolver(type_name="Query", field_name="generateText")
 @tracer.capture_method
 def generate_text(input: str):
     metrics.add_metric(name="GenerativeAIInvocations", unit=MetricUnit.Count, value=1)

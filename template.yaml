@@ -155,12 +155,12 @@ Resources:
             ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
             LambdaConfig:
                 LambdaFunctionArn: !GetAtt GenerativeAIFunction.Arn
-    GenerateSuggestionsResolver:
+    GenerateTextResolver:
         Type: "AWS::AppSync::Resolver"
         Properties:
             ApiId: !GetAtt GenerativeAIAPI.ApiId
             TypeName: "Query"
-            FieldName: "generateSuggestions"
+            FieldName: "generateText"
             DataSourceName: !GetAtt GenerativeAIFunctionDataSource.Name
     GenerateImageResolver:
         Type: "AWS::AppSync::Resolver"
