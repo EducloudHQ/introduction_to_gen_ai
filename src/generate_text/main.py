@@ -9,6 +9,7 @@ from botocore.exceptions import ClientError
 import boto3
 
 tracer = Tracer()
+from IPython.display import clear_output, display, display_markdown, Markdown
 
 metrics = Metrics(namespace="Powertools")
 
@@ -41,11 +42,14 @@ def generate_text(input: str):
     accept = 'application/json'
     contentType = 'application/json'
     outputText = "\n"
+    output = []
     logger.debug(f"input: we in here")
 
     try:
 
-        response = bedrock_runtime.invoke_model(body=body, modelId=modelId, accept=accept, contentType=contentType)
+        response = bedrock_runtime.invoke_model(body=body, modelId=modelId,
+                                                accept=accept,
+                                                contentType=contentType)
 
         response_body = json.loads(response.get('body').read())
         logger.debug(f"response body: {response_body}")
@@ -65,4 +69,4 @@ def generate_text(input: str):
         else:
             raise error
 
-    return outputText.replace("\n", "")
+    return outputText.replace('\n', '')

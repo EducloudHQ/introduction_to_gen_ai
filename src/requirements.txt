@@ -1,4 +1,7 @@
 requests
-aws-lambda-powertools[tracer]
+aws-lambda-powertools==2.26.0
+aws-xray-sdk==2.12.1
 boto3==1.28.57
 botocore==1.31.57
+ipython==8.17.2
+
